@@ -138,13 +138,20 @@ $('scrub').addEventListener('input',()=>{
 });
 async function seekFrame(target){
   return new Promise((resolve,reject)=>{
-    let done=false,callback=null;
-    const finish=(time,exact)=>{if(done)return;done=true;clearTimeout(timer);video.removeEventListener('error',error);if(callback!==null)video.cancelVideoFrameCallback?.(callback);resolve({time,exact});};
-    const error=()=>{if(done)return;done=true;clearTimeout(timer);reject(Error('影片解碼失敗'));};
-    const timer=setTimeout(()=>finish(video.currentTime,false),1500);
+    let done=false,callback=null,fallbackTimer=null,decoded=false,frameTime=null;
+    const cleanup=()=>{clearTimeout(timer);clearTimeout(fallbackTimer);video.removeEventListener('error',error);video.removeEventListener('seeked',seeked);if(callback!==null)video.cancelVideoFrameCallback?.(callback);};
+    const finish=(time,exact)=>{if(done)return;done=true;cleanup();resolve({time,exact});};
+    const error=()=>{if(done)return;done=true;cleanup();reject(Error('影片解碼失敗或逾時，請轉為 H.264 MP4 後再試。'));};
+    const seeked=()=>{
+      decoded=true;
+      if(frameTime!==null)finish(frameTime,true);
+      else if(!video.requestVideoFrameCallback)finish(video.currentTime,false);
+      else fallbackTimer=setTimeout(()=>finish(video.currentTime,false),80);
+    };
+    const timer=setTimeout(error,10000);
     video.addEventListener('error',error,{once:true});
-    if(video.requestVideoFrameCallback)callback=video.requestVideoFrameCallback((_,meta)=>finish(meta.mediaTime,true));
-    else video.addEventListener('seeked',()=>finish(video.currentTime,false),{once:true});
+    video.addEventListener('seeked',seeked,{once:true});
+    if(video.requestVideoFrameCallback)callback=video.requestVideoFrameCallback((_,meta)=>{frameTime=meta.mediaTime;if(decoded)finish(frameTime,true);});
     video.currentTime=Math.max(0,Math.min(video.duration-.001,target+1e-7));
   });
 }
@@ -159,6 +166,7 @@ $('analyzeButton').addEventListener('click',async()=>{
     if(count>108000)throw Error('請將單次分析縮短為一小時以內');
     if(!roi||roi[2]<=roi[0]||roi[3]<=roi[1])throw Error('請先設定分析範圍');
     setBusy(true);cancelled=false;packet=null;$('results').hidden=true;
+    $('videoFrame').scrollIntoView({block:'center',behavior:'instant'});
     $('progress').value=0;
     if(!model)model=await request('init');
     for(let i=0;i<count;i++){
