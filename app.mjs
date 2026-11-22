@@ -1,13 +1,75 @@
 import {JOINTS,EDGES,syntheticDemo,config,mean} from './metrics.mjs';
+import {population,selectThreshold,CONFIDENCE_MIN,CONFIDENCE_MAX} from './thresholds.mjs';
 
 const $=id=>document.getElementById(id),video=$('sourceVideo'),canvas=$('overlay'),ctx=canvas.getContext('2d');
 const names=['鼻','左眼','右眼','左耳','右耳','左肩','右肩','左肘','右肘','左腕','右腕','左髖','右髖','左膝','右膝','左踝','右踝'];
 let packet=null,sourceURL=null,sourceName='',roi=null,busy=false,cancelled=false,playing=false,raf=0,previewTime=0;
 let worker=null,nextId=0,pending=new Map(),model=null;
+let selectionMode='confidence',targetRate=80,manualConfidence=.4,effectiveConfidence=.4;
+let scorePopulation=null,populationRaw=null,remeasureTimer=null,measurementVersion=0,measuring=false;
 const nfmt=(value,digits=3)=>Number.isFinite(value)?value.toFixed(digits):'—';
 const timeLabel=t=>`${Math.floor(t/60).toString().padStart(2,'0')}:${Math.floor(t%60).toString().padStart(2,'0')}`;
 function status(text,kind=''){$('statusText').textContent=text;$('statusBox').className='status-box '+kind;}
-function getConfig(){return config({confidence:+$('confidence').value,window_s:+$('window').value,smooth_s:+$('smooth').value,max_gap_s:+$('gap').value,min_coverage:+$('coverage').value});}
+function getConfig(){return config({confidence:effectiveConfidence,window_s:+$('window').value,smooth_s:+$('smooth').value,max_gap_s:+$('gap').value,min_coverage:+$('coverage').value});}
+function choosePolicy(raw){
+  if(populationRaw!==raw){scorePopulation=population(raw);populationRaw=raw;}
+  return selectThreshold(scorePopulation,{mode:selectionMode,confidence:manualConfidence,targetRate});
+}
+function updateThresholdUI(raw=packet?.raw,policy=null){
+  if(raw)policy=policy||choosePolicy(raw);
+  effectiveConfidence=policy?.effective_confidence??manualConfidence;
+  for(const radio of document.querySelectorAll('[name=thresholdMode]')){radio.checked=radio.value===selectionMode;radio.disabled=busy;}
+  $('confidence').disabled=busy||selectionMode!=='confidence';
+  $('judgementRate').disabled=busy||selectionMode!=='judgement_rate';
+  $('confidence').value=effectiveConfidence;
+  $('confidenceKind').textContent=selectionMode==='confidence'?'手動':'自動';
+  $('confidenceValue').value=selectionMode==='judgement_rate'&&!raw?'待分析':effectiveConfidence.toFixed(4);
+  $('judgementRateKind').textContent=selectionMode==='judgement_rate'?'目標（手動）':'自動';
+  $('judgementRate').value=selectionMode==='judgement_rate'?targetRate:policy?.achieved_rate??0;
+  $('judgementRateValue').value=selectionMode==='judgement_rate'?`${targetRate.toFixed(0)}%`:Number.isFinite(policy?.achieved_rate)?`${policy.achieved_rate.toFixed(1)}%`:'待分析';
+  if(policy){
+    const actual=Number.isFinite(policy.achieved_rate)?`${policy.achieved_rate.toFixed(1)}%`:'無資料';
+    $('judgementInfo').textContent=(selectionMode==='judgement_rate'?`目標 ${targetRate.toFixed(0)}%，實際 ${actual}。`:`實際判定率 ${actual}。`)+`${policy.passed_keypoints} / ${policy.total_keypoints} 個關節點通過。`+(policy.limited_by_ties_or_bounds?'分數相同或有效點不足時，採可達到的最接近比例。':'');
+    $('statJudgement').textContent=actual;
+  }else{
+    $('judgementInfo').textContent=packet&&!raw?'此摘要沒有原始關節分數，請匯入完整 JSON 或重新分析後計算判定率。':selectionMode==='judgement_rate'?'分析後依全部關節分數，自動選擇最接近目標判定率的信心門檻。':'分析後自動計算判定率。一次只開放一個參數手動調整。';
+    $('statJudgement').textContent='—';
+  }
+  return policy;
+}
+function invalidateMeasurements(){clearTimeout(remeasureTimer);measurementVersion++;measuring=false;}
+function refreshExports(){
+  $('exportJson').disabled=measuring||!packet;
+  $('exportTracks').disabled=measuring||!packet?.processed;
+  $('exportFeatures').disabled=measuring||!packet?.summary?.features?.length;
+  $('exportSymmetry').disabled=measuring||!packet?.summary?.symmetry?.length;
+}
+async function measureSelection(raw,cfg,inference={},demo=false){
+  const policy=choosePolicy(raw);cfg={...cfg,confidence:policy.effective_confidence};
+  let result;
+  try{result=await request('measure',{...raw,config:cfg});}
+  catch(error){
+    if(!error.message.includes('肩膀或髖部有效點不足'))throw error;
+    result={format:'infant-motion-web/v1',raw,processed:null,summary:{schema_version:'1.0',frames:raw.times.length,duration_s:raw.times.at(-1)-raw.times[0],anchor_coverage:null,config:cfg,joint_order:JOINTS,features:[],symmetry:[],measurement_error:error.message,interpretation:'Insufficient reference joints. Raw tracks retained; no motion metrics reported.'}};
+  }
+  result.summary.inference=inference;result.summary.threshold_policy=policy;result.demo=demo;
+  return result;
+}
+function queueRemeasure(){
+  updateThresholdUI();
+  if(!packet?.raw||busy)return;
+  clearTimeout(remeasureTimer);const version=++measurementVersion,snapshot=packet;
+  measuring=true;refreshExports();status('正在依信心門檻與判定率重算指標，不需重新執行模型…');
+  remeasureTimer=setTimeout(async()=>{
+    try{
+      const result=await measureSelection(snapshot.raw,getConfig(),snapshot.summary.inference,snapshot.demo);
+      if(version!==measurementVersion||busy)return;
+      packet=result;showResults(packet);draw();status(result.summary.measurement_error?'判定率已更新，但肩髖資料不足，請降低門檻或提高目標判定率。':'判定率與動作指標已同步更新。',result.summary.measurement_error?'error':'success');
+    }catch(error){
+      if(version===measurementVersion)status('重算失敗：'+error.message,'error');
+    }finally{if(version===measurementVersion){measuring=false;refreshExports();}}
+  },180);
+}
 function initWorker(){
   if(worker)return;
   worker=new Worker(new URL('./worker.mjs',import.meta.url),{type:'module'});
@@ -32,9 +94,10 @@ function request(type,data={},transfer=[]){
 }
 function setBusy(value){
   busy=value;$('analyzeButton').disabled=value||!sourceURL;$('cancelButton').hidden=!value;
-  for(const id of ['videoFile','resultFile','demoButton','videoDemoButton','sampleFps','duration','confidence','window','smooth','gap','coverage','resetRoi','playButton','scrub','roiX1','roiY1','roiX2','roiY2'])$(id).disabled=value;
+  for(const id of ['videoFile','resultFile','demoButton','videoDemoButton','sampleFps','duration','window','smooth','gap','coverage','resetRoi','playButton','scrub','roiX1','roiY1','roiX2','roiY2'])$(id).disabled=value;
   $('progress').hidden=!value;
   if(!value){$('playButton').disabled=!packet&&!sourceURL;$('scrub').disabled=!packet&&!sourceURL;$('resetRoi').disabled=!sourceURL;}
+  updateThresholdUI();
 }
 function updateROIFields(){
   if(!roi)return;
@@ -79,7 +142,7 @@ function draw(){
 }
 async function loadVideo(file,minimumDuration=0){
   if(busy)return;
-  stopPlayback();packet=null;$('results').hidden=true;
+  stopPlayback();invalidateMeasurements();packet=null;updateThresholdUI();$('results').hidden=true;
   if(sourceURL)URL.revokeObjectURL(sourceURL);
   sourceURL=URL.createObjectURL(file);sourceName=file.name;video.hidden=false;
   $('emptyHint').hidden=true;video.src=sourceURL;
@@ -109,7 +172,9 @@ for(const event of ['dragover','dragleave','drop'])$('dropZone').addEventListene
   e.preventDefault();$('dropZone').classList.toggle('dragover',event==='dragover');
   if(event==='drop'&&e.dataTransfer.files[0])loadVideo(e.dataTransfer.files[0]);
 });
-$('confidence').addEventListener('input',()=>$('confidenceValue').value=(+$('confidence').value).toFixed(2));
+for(const radio of document.querySelectorAll('[name=thresholdMode]'))radio.addEventListener('change',()=>{if(!radio.checked||busy)return;selectionMode=radio.value;queueRemeasure();});
+$('confidence').addEventListener('input',()=>{if(selectionMode!=='confidence'||busy)return;manualConfidence=+$('confidence').value;queueRemeasure();});
+$('judgementRate').addEventListener('input',()=>{if(selectionMode!=='judgement_rate'||busy)return;targetRate=+$('judgementRate').value;queueRemeasure();});
 $('resetRoi').addEventListener('click',resetROI);
 for(const id of ['roiX1','roiY1','roiX2','roiY2'])$(id).addEventListener('change',()=>{
   const b=['roiX1','roiY1','roiX2','roiY2'].map(k=>+$(k).value);
@@ -167,7 +232,7 @@ $('analyzeButton').addEventListener('click',async()=>{
     const end=Math.min(video.duration,limit||video.duration),count=Math.ceil(end*fps);
     if(count>108000)throw Error('請將單次分析縮短為一小時以內');
     if(!roi||roi[2]<=roi[0]||roi[3]<=roi[1])throw Error('請先設定分析範圍');
-    setBusy(true);cancelled=false;packet=null;$('results').hidden=true;
+    invalidateMeasurements();packet=null;setBusy(true);cancelled=false;$('results').hidden=true;
     $('videoFrame').scrollIntoView({block:'center',behavior:'instant'});
     $('progress').value=0;
     if(!model)model=await request('init');
@@ -194,10 +259,10 @@ $('analyzeButton').addEventListener('click',async()=>{
     }
     if(samples.times.length<2)throw Error(cancelled?'分析已停止，擷取資料不足。':'解碼影格不足，請檢查影片。');
     status('正在計算軌跡與五項動作指標…');
-    packet=await request('measure',{...samples,config:cfg});
+    packet=await measureSelection(samples,cfg);
     packet.summary.inference={source_name:sourceName,width:video.videoWidth,height:video.videoHeight,roi_xyxy:[...roi],requested_sample_fps:fps,decoded_frames:packet.summary.frames,duplicate_frame_requests:duplicates,timestamp_fallback_frames:fallback,timestamp_source:'requestVideoFrameCallback.mediaTime; currentTime fallback when unavailable',selection:'manual_fixed_roi',partial:cancelled,model:{name:model.name,sha256:model.sha256,runtime:model.runtime,provider:'wasm_single_thread'},latency_mean_ms:mean(latency),latency_scope:'model inference; excludes seeking, preprocessing, measurement and export',created_utc:new Date().toISOString()};
     showResults(packet);$('modeBadge').textContent=cancelled?'部分分析結果':'分析完成';
-    status(`${cancelled?'已停止並產生部分結果':'分析完成'}：${packet.summary.frames} 個影格。${fallback?'部分影格使用近似時間，詳見匯出紀錄。':''}`,'success');
+    status(`${cancelled?'已停止並產生部分結果':'分析完成'}：${packet.summary.frames} 個影格。${fallback?'部分影格使用近似時間，詳見匯出紀錄。':''}${packet.summary.measurement_error?'肩髖資料不足，請降低門檻或提高目標判定率。':''}`,packet.summary.measurement_error?'error':'success');
   }catch(error){status(error.message||String(error),'error');}
   finally{setBusy(false);draw();}
 });
@@ -210,17 +275,18 @@ function table(element,headers,rows){
 function jointName(key){return names[JOINTS.indexOf(key)]||key;}
 function showResults(value){
   const s=value.summary;
+  updateThresholdUI(value.raw,s.threshold_policy);
   $('results').hidden=false;$('statFrames').textContent=s.frames??'—';$('statDuration').textContent=nfmt(s.duration_s,1);$('statCoverage').textContent=Number.isFinite(s.anchor_coverage)?`${nfmt(s.anchor_coverage*100,1)}%`:'—';
-  $('resultNote').textContent=value.demo?'合成測試資料，僅展示操作及指標定義。':`${s.inference?.source_name||'匯入的分析結果'} · ${s.inference?.partial?'部分結果 · ':''}品質通過不代表臨床正常。`;
+  $('resultNote').textContent=s.measurement_error?'肩髖有效點不足，保留原始分數與判定率；動作指標暫不輸出。':value.demo?'合成測試資料，僅展示操作及指標定義。':`${s.inference?.source_name||'匯入的分析結果'} · ${s.inference?.partial?'部分結果 · ':''}品質通過不代表臨床正常。`;
   table($('featuresTable'),['關節','起點 (s)','速度','變異度','Jerk RMS','幅度','有效率','品質'],s.features.map(r=>[jointName(r.joint),nfmt(r.window_start_s,1),nfmt(r.speed_mean),nfmt(r.position_variability),nfmt(r.jerk_rms),nfmt(r.amplitude),`${nfmt(r.coverage*100,0)}%`,r.status==='ok'?'通過':r.status==='speed_outlier'?'速度跳點':'資料不足']));
   table($('symmetryTable'),['雙側關節','起點 (s)','速度差異','幅度差異','鏡射 RMS','速度相關','共同有效率'],s.symmetry.map(r=>[jointName(r.pair.split(':')[0]).replace('左','左右'),nfmt(r.window_start_s,1),nfmt(r.speed_asymmetry),nfmt(r.amplitude_asymmetry),nfmt(r.mirrored_distance_rms),nfmt(r.speed_correlation),`${nfmt(r.paired_coverage*100,0)}%`]));
   renderChart();
-  $('exportTracks').disabled=!value.raw;
+  refreshExports();
   $('playButton').disabled=!value.raw&&!sourceURL;$('scrub').disabled=!value.raw&&!sourceURL;
 }
 function renderChart(){
   const chart=$('chart');chart.replaceChildren();
-  if(!packet?.processed?.body){const p=document.createElement('p');p.className='empty-chart';p.textContent='此檔案只有指標摘要。匯入完整網頁版 JSON，可檢視逐幀軌跡。';chart.append(p);return;}
+  if(!packet?.processed?.body){const p=document.createElement('p');p.className='empty-chart';p.textContent=packet?.summary?.measurement_error?'有效肩髖不足，無法建立軀幹座標。請降低門檻或提高目標判定率後重算。':'此檔案只有指標摘要。匯入完整網頁版 JSON，可檢視逐幀軌跡。';chart.append(p);return;}
   const t=packet.raw.times,j=+$('jointSelect').value,points=packet.processed.body.map(p=>p[j]),values=points.flat().filter(Number.isFinite);
   if(!values.length){chart.textContent='此關節的有效點不足。';return;}
   const width=760,height=280,left=50,right=15,top=18,bottom=42;
@@ -246,9 +312,10 @@ for(const tab of document.querySelectorAll('[role=tab]')){
   tab.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const tabs=[...document.querySelectorAll('[role=tab]')],i=tabs.indexOf(tab),next=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];next.click();next.focus();});
 }
 $('demoButton').addEventListener('click',()=>{
-  if(busy)return;stopPlayback();if(sourceURL)URL.revokeObjectURL(sourceURL);sourceURL=null;video.removeAttribute('src');video.load();video.hidden=true;roi=null;
+  if(busy)return;invalidateMeasurements();stopPlayback();if(sourceURL)URL.revokeObjectURL(sourceURL);sourceURL=null;video.removeAttribute('src');video.load();video.hidden=true;roi=null;
   packet=syntheticDemo();fitCanvas(640,480);previewTime=0;$('emptyHint').hidden=true;$('roiEditor').hidden=true;$('modeBadge').textContent='合成示範';$('fileInfo').textContent='合成週期運動 · 180 影格 · 30 FPS';$('previewHint').textContent='播放或拖動時間軸，觀察合成關節與軌跡。';$('analyzeButton').disabled=true;$('resetRoi').disabled=true;
-  showResults(packet);draw();status('已載入合成示範，不代表真實嬰幼兒量測效能。','success');
+  packet.summary.threshold_policy=choosePolicy(packet.raw);
+  showResults(packet);draw();queueRemeasure();
 });
 function validatePacket(value){
   const summary=value.summary||value;
@@ -262,8 +329,13 @@ $('resultFile').addEventListener('change',async e=>{
   try{
     if(file.size>150*1024*1024)throw Error('結果檔案大於 150 MB，請先切分影片');
     const value=validatePacket(JSON.parse(await file.text()));
+    invalidateMeasurements();
+    selectionMode=value.summary.threshold_policy?.mode==='judgement_rate'?'judgement_rate':'confidence';
+    targetRate=value.summary.threshold_policy?.requested_rate??80;
+    manualConfidence=Math.max(CONFIDENCE_MIN,Math.min(CONFIDENCE_MAX,value.summary.config?.confidence??.4));
+    for(const [id,key] of [['window','window_s'],['smooth','smooth_s'],['gap','max_gap_s'],['coverage','min_coverage']])if(Number.isFinite(value.summary.config?.[key]))$(id).value=value.summary.config[key];
     // Imported raw data are recomputed under their saved config instead of trusting derived arrays.
-    if(value.raw){packet=await request('measure',{...value.raw,config:value.summary.config});packet.summary.inference=value.summary.inference;packet.demo=value.demo;}
+    if(value.raw){packet=await measureSelection(value.raw,value.summary.config,value.summary.inference,value.demo);}
     else packet={summary:value.summary};
     showResults(packet);$('modeBadge').textContent='匯入結果';status('已匯入分析結果。','success');draw();
   }catch(error){status('匯入失敗：'+error.message,'error');}
@@ -275,12 +347,12 @@ function csv(rows){
   return '\ufeff'+[fields.map(escape).join(','),...rows.map(row=>fields.map(k=>escape(row[k])).join(','))].join('\r\n');
 }
 $('exportJson').addEventListener('click',()=>{if(packet)download('infant_motion_result.json',JSON.stringify(packet,null,2),'application/json');});
-$('exportFeatures').addEventListener('click',()=>{if(packet)download('features.csv',csv(packet.summary.features),'text/csv;charset=utf-8');});
-$('exportSymmetry').addEventListener('click',()=>{if(packet)download('symmetry.csv',csv(packet.summary.symmetry),'text/csv;charset=utf-8');});
+$('exportFeatures').addEventListener('click',()=>{if(packet)download('features.csv',csv(packet.summary.features.map(row=>({confidence_threshold:packet.summary.config?.confidence,judgement_rate:packet.summary.threshold_policy?.achieved_rate,...row}))),'text/csv;charset=utf-8');});
+$('exportSymmetry').addEventListener('click',()=>{if(packet)download('symmetry.csv',csv(packet.summary.symmetry.map(row=>({confidence_threshold:packet.summary.config?.confidence,judgement_rate:packet.summary.threshold_policy?.achieved_rate,...row}))),'text/csv;charset=utf-8');});
 $('exportTracks').addEventListener('click',()=>{
   if(!packet?.raw)return;const rows=[];
   packet.raw.times.forEach((t,i)=>JOINTS.forEach((joint,j)=>rows.push({frame:i,time_s:t,joint,raw_x_px:packet.raw.xy[i][j][0],raw_y_px:packet.raw.xy[i][j][1],confidence:packet.raw.scores[i][j],body_x:packet.processed.body[i][j][0],body_y:packet.processed.body[i][j][1],observed:packet.processed.observed[i][j],interpolated:packet.processed.interpolated[i][j]})));
   download('trajectories.csv',csv(rows),'text/csv;charset=utf-8');
 });
 if(location.protocol==='file:')status('請透過 GitHub Pages 或 localhost 開啟。瀏覽器不允許直接從 file:// 載入推論模組。','error');
-draw();
+updateThresholdUI();draw();

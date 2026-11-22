@@ -21,6 +21,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test joint judgement rate and confidence selection
+        run: node --test tests/*.test.mjs
       - name: Prepare browser runtime and verify RTMPose weights
         run: python scripts/prepare_web.py
       - name: Check static files and model integrity

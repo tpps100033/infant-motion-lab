@@ -9,7 +9,7 @@ WEB = ROOT
 
 
 def main():
-    required = ['index.html', 'app.mjs', 'metrics.mjs', 'pose.mjs', 'worker.mjs', 'style.css',
+    required = ['index.html', 'app.mjs', 'metrics.mjs', 'pose.mjs', 'worker.mjs', 'thresholds.mjs', 'style.css', 'controls.css', 'LICENSE',
                 'icon.svg', '.nojekyll', 'assets/model.json', 'vendor/ort.wasm.min.mjs',
                 'vendor/ort-wasm-simd-threaded.mjs', 'vendor/ort-wasm-simd-threaded.wasm',
                 'vendor/ONNXRUNTIME-LICENSE.txt', 'vendor/MMPose-LICENSE.txt', 'NOTICE.txt', 'DEPLOY.md']

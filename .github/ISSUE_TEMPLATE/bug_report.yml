@@ -1,0 +1,33 @@
+name: 問題回報
+description: 回報影片載入、姿態分析、指標或介面問題
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: 請優先使用公開範例或合成資料重現問題。
+  - type: input
+    id: browser
+    attributes:
+      label: 瀏覽器與作業系統
+      placeholder: Chrome 版本、Windows 或 macOS 版本
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      description: 使用哪個範例、設定模式、信心門檻或目標判定率？
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期結果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 實際結果與錯誤訊息
+    validations:
+      required: true

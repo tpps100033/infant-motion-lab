@@ -5,13 +5,14 @@
   <meta name="description" content="在瀏覽器內以 RTMPose 分析嬰幼兒關節軌跡、速度、變異度、平滑度、幅度與左右對稱性。">
   <title>Motion Lab｜嬰幼兒動作分析</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./style.css?v=0.2.0">
-  <script type="module" src="./app.mjs?v=0.2.1"></script>
+  <link rel="stylesheet" href="./style.css?v=0.3.0">
+  <link rel="stylesheet" href="./controls.css?v=0.3.0">
+  <script type="module" src="./app.mjs?v=0.3.0"></script>
 </head>
 <body>
 <header class="topbar"><a class="brand" href="./"><img src="./icon.svg" alt="" width="36" height="36"><span>Motion Lab<small>嬰幼兒動作研究</small></span></a><nav aria-label="主導覽"><a class="active" href="#workspace">分析工作台</a><a href="#methods">指標與方法</a><a href="./DEPLOY.md">部署說明</a></nav><span class="local-badge">影片留在你的裝置</span></header>
 <main>
-<section class="intro"><div><p class="eyebrow">RTMPOSE · MOVEMENT ANALYSIS</p><h1>從動作，看見細節。</h1><p class="lead">擷取關節軌跡，量化每一次揮手與踢腿。<br class="desktop-break">在瀏覽器內完成影片分析與結果匯出。</p></div><div class="intro-note"><span>研究原型 v0.2</span><p>二維動作量測<br>五類動作指標</p><small>不提供臨床診斷或正常分數</small></div></section>
+<section class="intro"><div><p class="eyebrow">RTMPOSE · MOVEMENT ANALYSIS</p><h1>從動作，看見細節。</h1><p class="lead">擷取關節軌跡，量化每一次揮手與踢腿。<br class="desktop-break">在瀏覽器內完成影片分析與結果匯出。</p></div><div class="intro-note"><span>研究原型 v0.3</span><p>二維動作量測<br>五類動作指標</p><small>不提供臨床診斷或正常分數</small></div></section>
 <div class="workspace" id="workspace">
 <aside class="controls">
   <section class="panel"><div class="panel-title"><h2>分析資料</h2><span class="step-label">選擇影片</span></div>
@@ -23,7 +24,11 @@
   <section class="panel"><div class="panel-title"><h2>分析設定</h2><span class="step-label">依影片調整</span></div>
     <div class="field"><label for="sampleFps">取樣頻率 <span>FPS</span></label><select id="sampleFps"><option value="15">15 FPS</option><option value="30" selected>30 FPS</option><option value="10">10 FPS</option></select></div>
     <div class="field"><label for="duration">分析長度 <span>秒，0 為全片</span></label><input id="duration" type="number" min="0" max="3600" value="10" step="1"></div>
-    <div class="field"><label for="confidence">關節信心門檻 <output id="confidenceValue">0.40</output></label><input id="confidence" type="range" min="0.05" max="0.95" step="0.05" value="0.4"></div>
+    <fieldset class="threshold-mode"><legend>信心與判定率</legend><label><input type="radio" name="thresholdMode" value="confidence" checked>以信心門檻設定</label><label><input type="radio" name="thresholdMode" value="judgement_rate">以判定率設定</label></fieldset>
+    <div class="field"><label for="confidence">信心門檻 <span id="confidenceKind">手動</span><output id="confidenceValue">0.400</output></label><input id="confidence" type="range" min="0.001" max="1" step="0.001" value="0.4"></div>
+    <div class="field"><label for="judgementRate">關節判定率 <span id="judgementRateKind">自動</span><output id="judgementRateValue">待分析</output></label><input id="judgementRate" type="range" min="0" max="100" step="1" value="80" disabled></div>
+    <p id="judgementInfo" class="help" aria-live="polite">分析後自動顯示通過信心門檻的關節比例。兩個參數一次只開放一個手動調整。</p>
+    <p class="help">判定率＝通過門檻的有效關節點數 ÷ 全部關節點數，不是辨識正確率。</p>
     <details><summary>進階參數</summary><div class="field"><label for="window">特徵視窗 <span>秒</span></label><input id="window" type="number" min="1" max="60" value="10"></div><div class="field"><label for="smooth">平滑視窗 <span>秒</span></label><input id="smooth" type="number" min="0" max="1" step="0.05" value="0.3"></div><div class="field"><label for="gap">短缺口補值上限 <span>秒</span></label><input id="gap" type="number" min="0" max="0.5" step="0.025" value="0.1"></div><div class="field"><label for="coverage">最低有效率</label><input id="coverage" type="number" min="0.1" max="1" step="0.05" value="0.8"></div></details>
     <button id="analyzeButton" class="button primary full" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 9 6-9 6z"/></svg>開始分析</button><button id="cancelButton" class="button outline full" hidden>停止分析</button>
     <p class="help">首次分析會載入約 54 MB 模型。請保持分頁開啟，處理速度取決於裝置。</p>
@@ -39,7 +44,7 @@
   </section>
   <section id="results" hidden>
     <div class="result-heading"><h2>量測結果</h2><button id="exportJson" class="button outline compact">下載完整 JSON</button></div>
-    <div class="stats"><div><span>分析影格</span><strong id="statFrames">—</strong><small>有效取樣時間點</small></div><div><span>分析時間</span><strong id="statDuration">—</strong><small>秒</small></div><div><span>軀幹有效率</span><strong id="statCoverage">—</strong><small>肩髖可用的時間比例</small></div></div>
+    <div class="stats"><div><span>分析影格</span><strong id="statFrames">—</strong><small>有效取樣時間點</small></div><div><span>分析時間</span><strong id="statDuration">—</strong><small>秒</small></div><div><span>軀幹有效率</span><strong id="statCoverage">—</strong><small>肩髖可用的時間比例</small></div><div><span>關節判定率</span><strong id="statJudgement">—</strong><small>信心門檻通過比例</small></div></div>
     <p id="resultNote" class="result-note"></p>
     <section class="panel result-panel"><div class="tabs" role="tablist" aria-label="分析結果"><button id="tabTrajectory" role="tab" aria-selected="true" aria-controls="trajectoryPanel" data-panel="trajectoryPanel">動作軌跡</button><button id="tabFeatures" role="tab" aria-selected="false" aria-controls="featuresPanel" data-panel="featuresPanel">五項指標</button><button id="tabSymmetry" role="tab" aria-selected="false" aria-controls="symmetryPanel" data-panel="symmetryPanel">左右對稱性</button></div>
       <div id="trajectoryPanel" role="tabpanel" aria-labelledby="tabTrajectory"><div class="chart-toolbar"><label for="jointSelect">觀察關節</label><select id="jointSelect"></select><button id="exportTracks" class="button text compact">下載軌跡 CSV</button></div><div id="chart" class="chart" role="img" aria-label="選擇關節的軀幹座標時間序列"></div><div class="legend"><span class="x">橫向位置 x</span><span class="y">縱向位置 y</span><small>單位：軀幹長度</small></div></div>
@@ -50,5 +55,5 @@
 </div></div>
 <section id="methods" class="methods"><div><p class="eyebrow">MEASUREMENTS</p><h2>每項數值，都有明確定義。</h2><p>位置以骨盆中心為原點，依軀幹方向旋轉，並以整段軀幹中位長度正規化。不同攝影角度與濾波參數會影響結果。</p></div><div class="method-grid"><article><span>速度</span><p>關節位置隨時間的變化率。<small>軀幹長度／秒</small></p></article><article><span>變異度</span><p>關節位置相對平均位置的 RMS 分散程度。<small>軀幹長度</small></p></article><article><span>平滑度</span><p>以 jerk RMS 表示，數值越低，軌跡越平滑。<small>軀幹長度／秒³</small></p></article><article><span>幅度</span><p>各方向第 5 至 95 百分位數的合成範圍。<small>軀幹長度</small></p></article><article><span>左右對稱性</span><p>以雙側共同有效時間計算速度與幅度差異。<small>2 × |左 − 右| ／（左 + 右）</small></p></article><article class="method-note"><span>研究使用</span><p>目前未建立月齡常模或診斷效度。<small>品質通過不代表臨床正常</small></p></article></div></section>
 </main>
-<footer><span>Motion Lab · RTMPose 動作研究原型</span><div><a href="https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose" target="_blank" rel="noreferrer">RTMPose</a><a href="./NOTICE.txt">開源授權</a><span>HTML + JavaScript · GitHub Pages</span></div></footer>
+<footer><span>Motion Lab · RTMPose 動作研究原型</span><div><a href="https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose" target="_blank" rel="noreferrer">RTMPose</a><a href="./LICENSE">MIT 許可證</a><a href="./NOTICE.txt">第三方授權</a><span>HTML + JavaScript · GitHub Pages</span></div></footer>
 </body></html>
