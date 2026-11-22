@@ -88,7 +88,7 @@ function initWorker(){
 function request(type,data={},transfer=[]){
   initWorker();const id=++nextId;
   return new Promise((resolve,reject)=>{
-    const timer=setTimeout(()=>{pending.delete(id);reject(Error('運算逾時，請縮短影片或重新整理後再試。'));worker?.terminate();worker=null;model=null;},type==='init'?180000:60000);
+    const timer=setTimeout(()=>{pending.delete(id);reject(Error(type==='init'?'模型載入逾時，請檢查網路後再試。':'運算逾時，請縮短影片或重新整理後再試。'));worker?.terminate();worker=null;model=null;},type==='init'?600000:60000);
     pending.set(id,{resolve,reject,timer});worker.postMessage({id,type,...data},transfer);
   });
 }
@@ -165,6 +165,7 @@ $('videoDemoButton').addEventListener('click',async()=>{
     if(!response.ok)throw Error(`公開短片下載失敗（${response.status}），請改用本機影片。`);
     const blob=await response.blob();setBusy(false);
     $('duration').value=0;
+    selectionMode='confidence';manualConfidence=.2;updateThresholdUI(null);
     await loadVideo(new File([blob],'babypose_fullbody_11s.mp4',{type:'video/mp4'}),10);
   }catch(error){setBusy(false);status(error.message,'error');}
 });

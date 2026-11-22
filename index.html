@@ -19,7 +19,7 @@
     <label class="upload-zone" for="videoFile" id="dropZone"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 22v5h20v-5M16 5v16m-6-10 6-6 6 6"/></svg><strong>選擇或拖入影片</strong><span>MP4、WebM、MOV · 依瀏覽器解碼支援</span></label><input id="videoFile" type="file" accept="video/*" class="visually-hidden">
     <p id="fileInfo" class="file-info">尚未選擇影片</p>
     <div class="secondary-actions"><button id="videoDemoButton" class="button soft">載入 11 秒全身範例</button><button id="demoButton" class="button outline">試用合成示範</button><label class="button outline" for="resultFile">匯入分析結果</label><input id="resultFile" type="file" accept=".json,application/json" class="visually-hidden"></div>
-    <p class="help">11 秒全身踢腿影片來自 <a href="https://github.com/meyurtsever/BabyPose/tree/main/data/kicking_legs" target="_blank" rel="noreferrer">BabyPose 專案</a>，頭部、軀幹、雙手與雙腳均在畫面內，動作仍可能造成自然遮擋。合成示範不是受試者資料。</p>
+    <p class="help">11 秒全身踢腿影片來自 <a href="https://github.com/meyurtsever/BabyPose/tree/main/data/kicking_legs" target="_blank" rel="noreferrer">BabyPose 專案</a>，頭部、軀幹、雙手與雙腳均在畫面內，動作仍可能造成自然遮擋。此範例預設信心門檻 20%。合成示範不是受試者資料。</p>
   </section>
   <section class="panel"><div class="panel-title"><h2>分析設定</h2><span class="step-label">依影片調整</span></div>
     <div class="field"><label for="sampleFps">取樣頻率 <span>FPS</span></label><select id="sampleFps"><option value="15">15 FPS</option><option value="30" selected>30 FPS</option><option value="10">10 FPS</option></select></div>

@@ -61,3 +61,5 @@ python scripts/serve.py
 本專案原創程式碼採用 [MIT License](LICENSE)。RTMPose 模型、ONNX Runtime Web 與公開示範影片各依原來源條款，請參閱 [NOTICE.txt](NOTICE.txt)。MIT 不改變第三方資產的授權。
 
 問題回報請使用 [GitHub Issues](https://github.com/tpps100033/infant-motion-lab/issues/new/choose)。參與方式見 [CONTRIBUTING.md](CONTRIBUTING.md)，版本變更見 [CHANGELOG.md](CHANGELOG.md)。
+
+範例建議信心門檻為 20%（載入時自動設定）。桌面版相同模型全幀驗證：270 影格、4,590 個關節點，40% 門檻通過 96.34%，20% 門檻通過 100%。此比例表示分數通過門檻，不表示座標與人工真值完全一致；瀏覽器解碼取樣可能略有差異。
