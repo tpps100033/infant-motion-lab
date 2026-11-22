@@ -25,7 +25,10 @@ def main():
         combined.update(data)
         total += len(data)
     assert total == manifest['bytes'] and combined.hexdigest() == manifest['sha256']
-    for file in WEB.rglob('*'):
+    deployment_files = [WEB / name for name in required if '/' not in name]
+    for directory in ['assets', 'vendor']:
+        deployment_files.extend((WEB / directory).rglob('*'))
+    for file in deployment_files:
         if file.is_file():
             assert file.stat().st_size < 25 * 1024 * 1024, f'File exceeds GitHub browser upload limit: {file.name}'
             assert file.suffix.lower() not in ['.mp4', '.mov', '.npz', '.csv'], 'Patient-like runtime artifact in static assets'

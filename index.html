@@ -6,7 +6,7 @@
   <title>Motion Lab｜嬰幼兒動作分析</title>
   <link rel="icon" href="./icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="./style.css?v=0.2.0">
-  <script type="module" src="./app.mjs?v=0.2.0"></script>
+  <script type="module" src="./app.mjs?v=0.2.1"></script>
 </head>
 <body>
 <header class="topbar"><a class="brand" href="./"><img src="./icon.svg" alt="" width="36" height="36"><span>Motion Lab<small>嬰幼兒動作研究</small></span></a><nav aria-label="主導覽"><a class="active" href="#workspace">分析工作台</a><a href="#methods">指標與方法</a><a href="./DEPLOY.md">部署說明</a></nav><span class="local-badge">影片留在你的裝置</span></header>
@@ -17,8 +17,8 @@
   <section class="panel"><div class="panel-title"><h2>分析資料</h2><span class="step-label">選擇影片</span></div>
     <label class="upload-zone" for="videoFile" id="dropZone"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 22v5h20v-5M16 5v16m-6-10 6-6 6 6"/></svg><strong>選擇或拖入影片</strong><span>MP4、WebM、MOV · 依瀏覽器解碼支援</span></label><input id="videoFile" type="file" accept="video/*" class="visually-hidden">
     <p id="fileInfo" class="file-info">尚未選擇影片</p>
-    <div class="secondary-actions"><button id="videoDemoButton" class="button soft">載入公開嬰兒短片</button><button id="demoButton" class="button outline">試用合成示範</button><label class="button outline" for="resultFile">匯入分析結果</label><input id="resultFile" type="file" accept=".json,application/json" class="visually-hidden"></div>
-    <p class="help">公開短片來自 <a href="https://github.com/meyurtsever/BabyPose/tree/main/demo" target="_blank" rel="noreferrer">BabyPose 專案</a>，用於流程展示。合成示範不是受試者資料。</p>
+    <div class="secondary-actions"><button id="videoDemoButton" class="button soft">載入 15 秒嬰兒範例</button><button id="demoButton" class="button outline">試用合成示範</button><label class="button outline" for="resultFile">匯入分析結果</label><input id="resultFile" type="file" accept=".json,application/json" class="visually-hidden"></div>
+    <p class="help">15 秒伸展影片來自 <a href="https://github.com/meyurtsever/BabyPose/tree/main/demo" target="_blank" rel="noreferrer">BabyPose 專案</a>，主要呈現上肢，下肢可能不完整。合成示範不是受試者資料。</p>
   </section>
   <section class="panel"><div class="panel-title"><h2>分析設定</h2><span class="step-label">依影片調整</span></div>
     <div class="field"><label for="sampleFps">取樣頻率 <span>FPS</span></label><select id="sampleFps"><option value="15">15 FPS</option><option value="30" selected>30 FPS</option><option value="10">10 FPS</option></select></div>

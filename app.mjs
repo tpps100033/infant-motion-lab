@@ -77,7 +77,7 @@ function draw(){
   $('timeLabel').textContent=`${timeLabel(previewTime)} / ${timeLabel(duration||0)}`;
   $('scrub').value=duration?previewTime/duration:0;
 }
-async function loadVideo(file){
+async function loadVideo(file,minimumDuration=0){
   if(busy)return;
   stopPlayback();packet=null;$('results').hidden=true;
   if(sourceURL)URL.revokeObjectURL(sourceURL);
@@ -86,6 +86,7 @@ async function loadVideo(file){
   try{
     await new Promise((resolve,reject)=>{video.onloadeddata=resolve;video.onerror=()=>reject(Error('瀏覽器無法解碼這部影片，請轉成 H.264 MP4 或 WebM。'));});
     if(!Number.isFinite(video.duration)||video.duration<=0)throw Error('影片長度無效');
+    if(video.duration<minimumDuration)throw Error(`範例影片需至少 ${minimumDuration} 秒，來源片長不足，請改用本機影片。`);
     fitCanvas(video.videoWidth,video.videoHeight);previewTime=0;roi=[0,0,video.videoWidth,video.videoHeight];updateROIFields();
     $('roiEditor').hidden=false;$('fileInfo').textContent=`${file.name} · ${video.videoWidth} × ${video.videoHeight} · ${nfmt(video.duration,1)} 秒`;
     $('modeBadge').textContent='待分析影片';$('previewHint').textContent='拖曳預覽畫面或輸入像素座標，圈住一名嬰幼兒的完整活動範圍。';
@@ -97,10 +98,11 @@ $('videoDemoButton').addEventListener('click',async()=>{
   if(busy)return;
   try{
     setBusy(true);status('正在從 BabyPose 公開專案載入示範短片…');
-    const response=await fetch('https://raw.githubusercontent.com/meyurtsever/BabyPose/main/demo/kicking_legs1_short2.mp4');
+    const response=await fetch('https://raw.githubusercontent.com/meyurtsever/BabyPose/main/demo/baby_stretching.mp4');
     if(!response.ok)throw Error(`公開短片下載失敗（${response.status}），請改用本機影片。`);
     const blob=await response.blob();setBusy(false);
-    await loadVideo(new File([blob],'babypose_demo.mp4',{type:'video/mp4'}));
+    $('duration').value=15;
+    await loadVideo(new File([blob],'babypose_stretching_15s.mp4',{type:'video/mp4'}),10);
   }catch(error){setBusy(false);status(error.message,'error');}
 });
 for(const event of ['dragover','dragleave','drop'])$('dropZone').addEventListener(event,e=>{
