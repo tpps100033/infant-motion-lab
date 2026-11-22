@@ -8,7 +8,9 @@ export function addMonths(value,count){
 export function followup(subject,visits=[],clinical=[]){
   const dates=visits.map(v=>v.visited_on).sort(),last=dates.at(-1)||subject.enrolled_on;
   const mcdi=clinical.filter(r=>r.tool==='MCDI').map(r=>r.assessed_on).sort();
-  return {next_visit:addMonths(last,1),next_mcdi:mcdi.length?addMonths(mcdi.at(-1),3):subject.age_months>=8&&subject.age_months<=30?subject.enrolled_on:null};
+  const latest=[...visits].sort((a,b)=>a.visited_on.localeCompare(b.visited_on)).at(-1),age=latest?.age_months??subject.age_months;
+  const firstDue=age>=8&&age<=30?last:age<8?addMonths(subject.enrolled_on,Math.ceil(8-subject.age_months)):null;
+  return {next_visit:addMonths(last,1),next_mcdi:age>30?null:mcdi.length?addMonths(mcdi.at(-1),3):firstDue};
 }
 export function averageMetric(summary,joint,metric){
   let weight=0,total=0;

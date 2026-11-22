@@ -82,7 +82,7 @@ async function renderAnalyses(){
   if(!list.length)$('analysisList').append(el('p','此訪視尚無分析結果。','muted'));
 }
 function renderTrend(){
-  const joint=$('trendJoint').value,metric=$('trendMetric').value,accepted=analysisCache.filter(a=>a.review==='accepted').sort((a,b)=>a.created_at.localeCompare(b.created_at));
+  const joint=$('trendJoint').value,metric=$('trendMetric').value,accepted=analysisCache.filter(a=>a.review==='accepted'&&a.summary.inference?.model?.sha256).sort((a,b)=>a.created_at.localeCompare(b.created_at));
   const reference=accepted.at(-1),key=reference&&comparisonKey(reference.summary),byVisit=new Map();
   for(const a of accepted)if(comparisonKey(a.summary)===key)byVisit.set(a.visit_id,a);
   const rows=detail.visits.map(v=>{const a=byVisit.get(v.id);return {date:v.visited_on,age:v.corrected_age_months,group:v.group,value:a?averageMetric(a.summary,joint,metric):null,id:a?.id||''};});

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {syntheticDemo,analyzeTracks,derivatives,config} from '../metrics.mjs';
-import {addMonths,susScore,comparisonKey,researchQuality} from '../research-core.mjs';
+import {addMonths,susScore,comparisonKey,researchQuality,followup} from '../research-core.mjs';
 import {analyzeAudio} from '../audio.mjs';
 
 test('constant velocity has analytic speed, zero acceleration and jerk',()=>{
@@ -26,6 +26,8 @@ test('long missing gaps are not bridged for displacement and straightness',()=>{
 test('calendar month scheduling and research qualification',()=>{
   assert.equal(addMonths('2028-01-31',1),'2028-02-29');assert.equal(susScore([5,1,5,1,5,1,5,1,5,1]),100);
   assert.equal(researchQuality({usable_video_seconds:11}).ready,false);
+  assert.equal(followup({enrolled_on:'2026-01-01',age_months:6}).next_mcdi,'2026-03-01');
+  assert.equal(followup({enrolled_on:'2026-01-01',age_months:6},[{visited_on:'2026-03-01',age_months:8}]).next_mcdi,'2026-03-01');
   assert.notEqual(comparisonKey({config:{confidence:.2}}),comparisonKey({config:{confidence:.4}}));
 });
 test('audio silence does not invent vocalizations or pitch',()=>{
