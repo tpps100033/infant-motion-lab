@@ -6,3 +6,11 @@
 /outputs/
 __pycache__/
 *.zip
+/.venv/
+/server/.venv/
+/server/data/
+*.sqlite*
+*.key
+*.enc
+.env
+.pytest_cache/

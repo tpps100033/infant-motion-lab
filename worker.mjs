@@ -1,6 +1,6 @@
 import * as ort from './vendor/ort.wasm.min.mjs';
 import {preprocess,decode} from './pose.mjs';
-import {analyzeTracks} from './metrics.mjs';
+import {analyzeTracks} from './metrics.mjs?v=0.4.0';
 
 let session,manifest;
 const digest=async bytes=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(v=>v.toString(16).padStart(2,'0')).join('');

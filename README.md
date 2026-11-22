@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub Pages](https://img.shields.io/badge/demo-GitHub%20Pages-0c827c)](https://tpps100033.github.io/infant-motion-lab/)
 
-可部署至 GitHub Pages 的 HTML / CSS / JavaScript 研究原型。RTMPose-M 在瀏覽器內執行，無須 Python 後端或 Streamlit。
+可部署至 GitHub Pages 的 HTML / CSS / JavaScript 研究原型。RTMPose-M 在瀏覽器內執行；公開分析頁可獨立使用。受試者管理另有本機 Python / SQLite 私人服務。
 
 網站：https://tpps100033.github.io/infant-motion-lab/
 
@@ -18,7 +18,7 @@
 - 完整 JSON、逐幀 CSV、特徵 CSV 與雙側 CSV 匯出及結果重新匯入。
 - 合成資料示範，另可按鈕載入 BabyPose 的 11 秒全身踢腿影片，預設分析全片。
 
-影片與座標留在瀏覽器記憶體，程式沒有影片上傳 API。公開範例另從 BabyPose 專案下載。關閉網頁前請下載結果。
+公開分析頁的影片與座標留在瀏覽器記憶體。私人資料庫另提供明確操作的歸檔與媒體上傳；不會自動保存原片。公開範例從 BabyPose 專案下載，關閉網頁前請下載或歸檔結果。
 
 ## 操作
 
@@ -63,3 +63,20 @@ python scripts/serve.py
 問題回報請使用 [GitHub Issues](https://github.com/tpps100033/infant-motion-lab/issues/new/choose)。參與方式見 [CONTRIBUTING.md](CONTRIBUTING.md)，版本變更見 [CHANGELOG.md](CHANGELOG.md)。
 
 範例建議信心門檻為 20%（載入時自動設定）。桌面版相同模型全幀驗證：270 影格、4,590 個關節點，40% 門檻通過 96.34%，20% 門檻通過 100%。此比例表示分數通過門檻，不表示座標與人工真值完全一致；瀏覽器解碼取樣可能略有差異。
+
+
+## 研究資料庫面板（v0.4）
+
+已新增 [研究資料管理入口](https://tpps100033.github.io/infant-motion-lab/research.html)。正式個案使用本機私人網址 http://127.0.0.1:8050/research.html ，以 `Start-Research.ps1` 啟動。資料、金鑰與帳密位於 Windows 使用者的 AppData，不納入 Git 或 GitHub Pages。
+
+- 收案、監護人同意版本、每月訪視、實足／校正月齡、動態分組與臨床量表結果。
+- 原始影片／語音加密保存、分析版本歸檔、審閱與操作稽核。
+- 個體縱向追蹤、研究 CSV、個案列印報告、加密備份與伺服器搬遷。
+- 語音高通、能量端點候選、音高中位數／IQR、節律描述與人工聲源標籤。
+- 多影片分析佇列、速度與加速度曲線、依關節及視窗篩選擴充指標。
+
+動作特徵已增加速度分布、加速度、方向幅度與變異、路徑長度、位移、直線度、無因次平方 jerk、六組肢體協調性、肘膝二維角度。指標版本為 **schema 2.0**；舊資料有 raw tracks 時可以重算。
+
+[安裝與管理](docs/PRIVATE_SERVER.md) · [計畫需求對照](docs/REQUIREMENTS.md) · [指標方法](docs/METHODS.md) · [公開資料測試](docs/DATASET_TESTS.md)
+
+研究資料匯出需人工審閱，動作影片須符合至少連續 3 分鐘與拍攝檢核。公開 11 秒範例僅供操作測試。語音聲源與音節類別需人工確認；尚無訓練完成的跨模態疾病預測模型或月齡常模。

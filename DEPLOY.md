@@ -46,3 +46,8 @@
 - 網頁版提供骨架播放與座標／指標匯出，不產生轉碼後的疊圖影片。原 Python 工具保留 MP4 匯出與批次資料評估。
 
 模型資訊與 SHA256 在 `assets/model.json`，程式載入時驗證模型分塊與完整檔案。原創程式碼採 MIT（`LICENSE`），第三方資產依各自條款，見 `NOTICE.txt`。
+
+
+## 私人資料庫
+
+GitHub Pages 僅部署 HTML / JavaScript；受試者資料由 `server/` 私人服務管理，不在 Pages 上提供 API。啟動 `Start-Research.ps1` 後開啟 localhost:8050/research.html。同一私人服務也提供動作工作台，可直接把分析歸檔到選定訪視。詳見 [私人資料庫說明](https://github.com/tpps100033/infant-motion-lab/blob/main/docs/PRIVATE_SERVER.md)。

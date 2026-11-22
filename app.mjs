@@ -1,4 +1,4 @@
-import {JOINTS,EDGES,syntheticDemo,config,mean} from './metrics.mjs';
+import {JOINTS,EDGES,syntheticDemo,config,mean,derivatives} from './metrics.mjs?v=0.4.0';
 import {population,selectThreshold,CONFIDENCE_MIN,CONFIDENCE_MAX} from './thresholds.mjs';
 
 const $=id=>document.getElementById(id),video=$('sourceVideo'),canvas=$('overlay'),ctx=canvas.getContext('2d');
@@ -7,6 +7,7 @@ let packet=null,sourceURL=null,sourceName='',roi=null,busy=false,cancelled=false
 let worker=null,nextId=0,pending=new Map(),model=null;
 let selectionMode='confidence',targetRate=80,manualConfidence=.4,effectiveConfidence=.4;
 let scorePopulation=null,populationRaw=null,remeasureTimer=null,measurementVersion=0,measuring=false;
+let batchRunning=false,batchCancelled=false,batchVideos=[];
 const nfmt=(value,digits=3)=>Number.isFinite(value)?value.toFixed(digits):'—';
 const timeLabel=t=>`${Math.floor(t/60).toString().padStart(2,'0')}:${Math.floor(t%60).toString().padStart(2,'0')}`;
 function status(text,kind=''){$('statusText').textContent=text;$('statusBox').className='status-box '+kind;}
@@ -43,6 +44,9 @@ function refreshExports(){
   $('exportTracks').disabled=measuring||!packet?.processed;
   $('exportFeatures').disabled=measuring||!packet?.summary?.features?.length;
   $('exportSymmetry').disabled=measuring||!packet?.summary?.symmetry?.length;
+  $('exportCoordination').disabled=measuring||!packet?.summary?.coordination?.length;
+  $('exportAngles').disabled=measuring||!packet?.summary?.angles?.length;
+  $('archiveResult').disabled=measuring||busy||!packet||!!packet.demo;
 }
 async function measureSelection(raw,cfg,inference={},demo=false){
   const policy=choosePolicy(raw);cfg={...cfg,confidence:policy.effective_confidence};
@@ -72,7 +76,7 @@ function queueRemeasure(){
 }
 function initWorker(){
   if(worker)return;
-  worker=new Worker(new URL('./worker.mjs',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./worker.mjs?v=0.4.0',import.meta.url),{type:'module'});
   worker.onmessage=({data})=>{
     const task=pending.get(data.id);if(!task)return;
     if(data.progress){status(data.progress);return;}
@@ -98,6 +102,8 @@ function setBusy(value){
   $('progress').hidden=!value;
   if(!value){$('playButton').disabled=!packet&&!sourceURL;$('scrub').disabled=!packet&&!sourceURL;$('resetRoi').disabled=!sourceURL;}
   updateThresholdUI();
+  if(batchRunning)for(const id of ['analyzeButton','videoFile','resultFile','demoButton','videoDemoButton','sampleFps','duration','confidence','judgementRate','window','smooth','gap','coverage'])$(id).disabled=true;
+  $('batchFiles').disabled=value||batchRunning;$('batchStart').disabled=value||batchRunning||!batchVideos.length;
 }
 function updateROIFields(){
   if(!roi)return;
@@ -224,7 +230,7 @@ async function seekFrame(target){
   });
 }
 $('cancelButton').addEventListener('click',()=>{cancelled=true;status('正在停止；已擷取的影格會嘗試產生部分結果。');});
-$('analyzeButton').addEventListener('click',async()=>{
+async function analyzeVideo(){
   if(busy||!sourceURL)return;
   stopPlayback();let samples={times:[],xy:[],scores:[]},fallback=0,duplicates=0,latency=[];
   try{
@@ -266,7 +272,8 @@ $('analyzeButton').addEventListener('click',async()=>{
     status(`${cancelled?'已停止並產生部分結果':'分析完成'}：${packet.summary.frames} 個影格。${fallback?'部分影格使用近似時間，詳見匯出紀錄。':''}${packet.summary.measurement_error?'肩髖資料不足，請降低門檻或提高目標判定率。':''}`,packet.summary.measurement_error?'error':'success');
   }catch(error){status(error.message||String(error),'error');}
   finally{setBusy(false);draw();}
-});
+}
+$('analyzeButton').addEventListener('click',analyzeVideo);
 function table(element,headers,rows){
   element.replaceChildren();const head=document.createElement('thead'),tr=document.createElement('tr');
   headers.forEach(text=>{const th=document.createElement('th');th.textContent=text;tr.append(th);});head.append(tr);element.append(head);
@@ -279,16 +286,28 @@ function showResults(value){
   updateThresholdUI(value.raw,s.threshold_policy);
   $('results').hidden=false;$('statFrames').textContent=s.frames??'—';$('statDuration').textContent=nfmt(s.duration_s,1);$('statCoverage').textContent=Number.isFinite(s.anchor_coverage)?`${nfmt(s.anchor_coverage*100,1)}%`:'—';
   $('resultNote').textContent=s.measurement_error?'肩髖有效點不足，保留原始分數與判定率；動作指標暫不輸出。':value.demo?'合成測試資料，僅展示操作及指標定義。':`${s.inference?.source_name||'匯入的分析結果'} · ${s.inference?.partial?'部分結果 · ':''}品質通過不代表臨床正常。`;
-  table($('featuresTable'),['關節','起點 (s)','速度','變異度','Jerk RMS','幅度','有效率','品質'],s.features.map(r=>[jointName(r.joint),nfmt(r.window_start_s,1),nfmt(r.speed_mean),nfmt(r.position_variability),nfmt(r.jerk_rms),nfmt(r.amplitude),`${nfmt(r.coverage*100,0)}%`,r.status==='ok'?'通過':r.status==='speed_outlier'?'速度跳點':'資料不足']));
+  const windowValue=$('featureWindow').value;$('featureWindow').replaceChildren();const all=document.createElement('option');all.value='all';all.textContent='全部視窗';$('featureWindow').append(all);for(const start of [...new Set(s.features.map(r=>r.window_start_s))]){const option=document.createElement('option');option.value=String(start);option.textContent=nfmt(start,1)+' s';$('featureWindow').append(option);}$('featureWindow').value=[...$('featureWindow').options].some(o=>o.value===windowValue)?windowValue:'all';
+  renderFeatureTable();
   table($('symmetryTable'),['雙側關節','起點 (s)','速度差異','幅度差異','鏡射 RMS','速度相關','共同有效率'],s.symmetry.map(r=>[jointName(r.pair.split(':')[0]).replace('左','左右'),nfmt(r.window_start_s,1),nfmt(r.speed_asymmetry),nfmt(r.amplitude_asymmetry),nfmt(r.mirrored_distance_rms),nfmt(r.speed_correlation),`${nfmt(r.paired_coverage*100,0)}%`]));
+  table($('coordinationTable'),['關節組合','起點 s','速度相關','共同微分比例','品質'],(s.coordination||[]).map(r=>[jointName(r.joint_a)+' / '+jointName(r.joint_b),nfmt(r.window_start_s,1),nfmt(r.speed_correlation),nfmt(r.paired_derivative_fraction*100,1)+'%',r.status]));
+  table($('anglesTable'),['關節','起點 s','平均 °','SD °','P05 °','P95 °','活動範圍 °','有效率'],(s.angles||[]).map(r=>[jointName(r.joint),nfmt(r.window_start_s,1),nfmt(r.angle_mean_deg),nfmt(r.angle_sd_deg),nfmt(r.angle_p05_deg),nfmt(r.angle_p95_deg),nfmt(r.range_p90_deg),nfmt(r.coverage*100,1)+'%']));
   renderChart();
   refreshExports();
   $('playButton').disabled=!value.raw&&!sourceURL;$('scrub').disabled=!value.raw&&!sourceURL;
 }
+const featureColumns={core:[['speed_mean','平均速度'],['position_variability','位置變異度'],['jerk_rms','Jerk RMS'],['amplitude','幅度']],dynamics:[['speed_mean','平均速度'],['speed_sd','速度 SD'],['speed_median','速度中位數'],['speed_p95','速度 P95'],['speed_peak','速度峰值'],['acceleration_rms','加速度 RMS'],['acceleration_peak','加速度峰值']],range:[['amplitude_x','X 幅度'],['amplitude_y','Y 幅度'],['amplitude','合成幅度'],['variability_x','X 變異度'],['variability_y','Y 變異度'],['path_length','路徑長度'],['path_observed_s','路徑可用秒數'],['path_mean_speed','路徑平均速度'],['displacement','位移'],['straightness','直線度']],smoothness:[['jerk_rms','Jerk RMS'],['dimensionless_squared_jerk','無因次平方 Jerk'],['derivative_duration_s','微分可用秒數']],quality:[['coverage','座標有效比例'],['observed_fraction','原始觀測比例'],['interpolated_fraction','補值比例'],['derivative_fraction','微分比例'],['speed_outlier_fraction','速度跳點比例']]};
+function renderFeatureTable(){
+  if(!packet)return;const category=$('featureCategory').value,columns=featureColumns[category],joint=$('featureJoint').value,window=$('featureWindow').value;
+  table($('featuresTable'),['關節','起點 s',...columns.map(c=>c[1]),'品質'],packet.summary.features.filter(r=>(joint==='all'||r.joint===joint)&&(window==='all'||String(r.window_start_s)===window)).map(r=>[jointName(r.joint),nfmt(r.window_start_s,1),...columns.map(([key])=>nfmt(r[key])),r.status==='ok'?'通過':r.status==='speed_outlier'?'速度跳點':'資料不足']));
+  $('featureUnits').textContent=category==='dynamics'?'速度：軀幹長度／秒；加速度：軀幹長度／秒²':category==='range'?'幅度、變異度、路徑及位移：軀幹長度；直線度：0–1':category==='smoothness'?'Jerk RMS：軀幹長度／秒³；無因次平方 Jerk：無單位；靜止或分段缺口留空':category==='quality'?'各比例介於 0–1；補值後有效率與原始判定率不同':'速度：軀幹長度／秒；變異度與幅度：軀幹長度；Jerk RMS：軀幹長度／秒³';
+}
 function renderChart(){
   const chart=$('chart');chart.replaceChildren();
   if(!packet?.processed?.body){const p=document.createElement('p');p.className='empty-chart';p.textContent=packet?.summary?.measurement_error?'有效肩髖不足，無法建立軀幹座標。請降低門檻或提高目標判定率後重算。':'此檔案只有指標摘要。匯入完整網頁版 JSON，可檢視逐幀軌跡。';chart.append(p);return;}
-  const t=packet.raw.times,j=+$('jointSelect').value,points=packet.processed.body.map(p=>p[j]),values=points.flat().filter(Number.isFinite);
+  const t=packet.raw.times,j=+$('jointSelect').value,signal=$('signalSelect').value,bodyPoints=packet.processed.body.map(p=>p[j]);
+  const derived=signal==='position'?null:derivatives(t,bodyPoints,config(packet.summary.config),packet.processed.breaks);
+  const points=signal==='position'?bodyPoints:derived[signal].map(v=>[v,NaN]),values=points.flat().filter(Number.isFinite);
+  document.querySelector('.legend .x').textContent=signal==='position'?'橫向位置 x':signal==='speed'?'速度':'加速度';document.querySelector('.legend .y').hidden=signal!=='position';
   if(!values.length){chart.textContent='此關節的有效點不足。';return;}
   const width=760,height=280,left=50,right=15,top=18,bottom=42;
   let lo=values.reduce((m,v)=>Math.min(m,v),Infinity),hi=values.reduce((m,v)=>Math.max(m,v),-Infinity);const pad=Math.max((hi-lo)*.15,.05);lo-=pad;hi+=pad;
@@ -299,15 +318,17 @@ function renderChart(){
     const yy=top+k*(height-top-bottom)/4;add('line',{x1:left,x2:width-right,y1:yy,y2:yy,stroke:'#e3ebf1'});add('text',{x:left-9,y:yy+4,'text-anchor':'end',fill:'#6a7d8e','font-size':11},(hi-k*(hi-lo)/4).toFixed(2));
     const stamp=t[0]+k*(t.at(-1)-t[0])/4;add('text',{x:x(stamp),y:height-bottom+23,'text-anchor':'middle',fill:'#6a7d8e','font-size':11},stamp.toFixed(1)+' s');
   }
-  for(let axis=0;axis<2;axis++){
+  for(let axis=0;axis<(signal==='position'?2:1);axis++){
     let d='',connected=false;
     points.forEach((p,i)=>{if(!Number.isFinite(p[axis])||packet.processed.breaks?.[i]){connected=false;if(!Number.isFinite(p[axis]))return;}d+=`${connected?'L':'M'}${x(t[i]).toFixed(2)},${y(p[axis]).toFixed(2)} `;connected=true;});
     add('path',{d,fill:'none',stroke:axis?'#e29445':'#0c827c','stroke-width':2.2,'stroke-linejoin':'round'});
   }
   chart.append(svg);
 }
-JOINTS.forEach((key,i)=>{const option=document.createElement('option');option.value=i;option.textContent=names[i];$('jointSelect').append(option);});$('jointSelect').value=9;
+JOINTS.forEach((key,i)=>{const option=document.createElement('option');option.value=i;option.textContent=names[i];$('jointSelect').append(option);const featureOption=document.createElement('option');featureOption.value=key;featureOption.textContent=names[i];$('featureJoint').append(featureOption);});$('jointSelect').value=9;
 $('jointSelect').addEventListener('change',renderChart);
+$('signalSelect').addEventListener('change',()=>{renderChart();$('signalUnits').textContent=$('signalSelect').value==='position'?'單位：軀幹長度':$('signalSelect').value==='speed'?'單位：軀幹長度／秒':'單位：軀幹長度／秒²';});
+for(const id of ['featureCategory','featureJoint','featureWindow'])$(id).addEventListener('change',renderFeatureTable);
 for(const tab of document.querySelectorAll('[role=tab]')){
   tab.addEventListener('click',()=>{for(const b of document.querySelectorAll('[role=tab]')){const selected=b===tab;b.setAttribute('aria-selected',String(selected));$(b.dataset.panel).hidden=!selected;b.tabIndex=selected?0:-1;}});
   tab.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const tabs=[...document.querySelectorAll('[role=tab]')],i=tabs.indexOf(tab),next=tabs[(i+(e.key==='ArrowRight'?1:tabs.length-1))%tabs.length];next.click();next.focus();});
@@ -357,3 +378,55 @@ $('exportTracks').addEventListener('click',()=>{
 });
 if(location.protocol==='file:')status('請透過 GitHub Pages 或 localhost 開啟。瀏覽器不允許直接從 file:// 載入推論模組。','error');
 updateThresholdUI();draw();
+
+for(const [id,section,name] of [['exportCoordination','coordination','coordination.csv'],['exportAngles','angles','angles.csv']])$(id).onclick=()=>{if(packet)download(name,csv((packet.summary[section]||[]).map(row=>({confidence_threshold:packet.summary.config?.confidence,judgement_rate:packet.summary.threshold_policy?.achieved_rate,...row}))),'text/csv;charset=utf-8');};
+
+$('batchFiles').onchange=()=>{batchVideos=[...$('batchFiles').files];$('batchStart').disabled=!batchVideos.length||busy;$('batchStatus').textContent=`已選擇 ${batchVideos.length} 部影片。每部都會分析全片；請保持分頁開啟並允許多檔下載。`;};
+$('batchStop').onclick=()=>{batchCancelled=true;cancelled=true;$('batchStatus').textContent='正在停止佇列；當前影片會嘗試保存部分結果。';};
+$('batchStart').onclick=async()=>{
+  if(busy||batchRunning||!batchVideos.length)return;
+  batchRunning=true;batchCancelled=false;$('batchStop').disabled=false;const rows=[];
+  for(let i=0;i<batchVideos.length&&!batchCancelled;i++){
+    const file=batchVideos[i];$('batchStatus').textContent=`正在處理 ${i+1} / ${batchVideos.length}：${file.name}`;
+    try{
+      await loadVideo(file);if(!sourceURL)throw Error('無法解碼影片');$('duration').value=0;
+      await analyzeVideo();
+      if(!packet?.raw)throw Error($('statusText').textContent||'未產生有效結果');
+      const stem=file.name.replace(/\.[^.]+$/,'').replace(/[^\p{L}\p{N}_-]/gu,'_');
+      download(`${String(i+1).padStart(2,'0')}_${stem}_analysis.json`,JSON.stringify(packet,null,2),'application/json');
+      rows.push([file.name,packet.summary.frames,nfmt(packet.summary.threshold_policy?.achieved_rate,1)+'%',packet.summary.inference?.partial?'部分結果':packet.summary.measurement_error?'肩髖資料不足':'完成']);
+    }catch(error){rows.push([file.name,'—','—',error.message]);}
+    table($('batchTable'),['影片','影格數','判定率','狀態'],rows);
+  }
+  batchRunning=false;$('batchStop').disabled=true;setBusy(false);$('batchStatus').textContent=batchCancelled?'佇列已停止；已完成結果已觸發下載。':'佇列完成。請確認瀏覽器下載清單，再在私人面板歸檔。';
+};
+
+const archiveVisit=new URLSearchParams(location.search).get('visit'),archiveAnalysis=new URLSearchParams(location.search).get('analysis');
+async function privateAPI(path,options={}){
+  const response=await fetch('./api/'+path,{credentials:'same-origin',...options,headers:{'X-MotionLab-Request':'1','Content-Type':'application/json',...options.headers}});
+  if(!response.ok){let body;try{body=await response.json();}catch{}throw Error(typeof body?.detail==='string'?body.detail:'請從私人研究面板登入後再操作');}
+  return response.json();
+}
+if(archiveVisit||archiveAnalysis){
+  $('archivePanel').hidden=false;$('results').hidden=false;$('archiveInfo').textContent='正在確認私人資料庫登入狀態…';
+  (async()=>{
+    try{
+      const me=await privateAPI('me');$('archiveInfo').textContent=archiveVisit?`已登入 ${me.username}。目前歸檔訪視：${archiveVisit.slice(0,8)}。分析後按保存，原始影片不會自動上傳。`:'已登入私人資料庫，正在讀取已歸檔分析。';
+      $('archiveResult').hidden=!archiveVisit;
+      if(archiveAnalysis){
+        const saved=await privateAPI('analyses/'+encodeURIComponent(archiveAnalysis));
+        if(saved.kind!=='motion')throw Error('此筆為語音分析，請在研究管理面板檢視');
+        const value=validatePacket(saved.result);invalidateMeasurements();selectionMode=value.summary.threshold_policy?.mode==='judgement_rate'?'judgement_rate':'confidence';targetRate=value.summary.threshold_policy?.requested_rate??80;manualConfidence=Math.max(CONFIDENCE_MIN,Math.min(CONFIDENCE_MAX,value.summary.config?.confidence??.4));
+        for(const [id,key] of [['window','window_s'],['smooth','smooth_s'],['gap','max_gap_s'],['coverage','min_coverage']])if(Number.isFinite(value.summary.config?.[key]))$(id).value=value.summary.config[key];
+        packet=value.raw?await measureSelection(value.raw,value.summary.config,value.summary.inference,value.demo):value;showResults(packet);draw();$('archiveInfo').textContent='顯示已歸檔分析。原始座標依保存的參數重算；資料庫版本未被改寫。';
+      }
+    }catch(error){$('archiveInfo').textContent=error.message;$('archiveResult').disabled=true;}
+  })();
+}
+$('archiveResult').onclick=async()=>{
+  if(!archiveVisit||!packet||packet.demo||measuring)return;
+  $('archiveResult').disabled=true;
+  try{const result=await privateAPI('visits/'+encodeURIComponent(archiveVisit)+'/analyses',{method:'POST',body:JSON.stringify({kind:'motion',result:packet})});$('archiveStatus').textContent=`已保存分析 ${result.id.slice(0,8)}，等待研究團隊審閱。`;}
+  catch(error){$('archiveStatus').textContent=error.message;}
+  finally{$('archiveResult').disabled=false;}
+};
