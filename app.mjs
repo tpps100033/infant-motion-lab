@@ -408,6 +408,7 @@ async function privateAPI(path,options={}){
   return response.json();
 }
 if(archiveVisit||archiveAnalysis){
+  if(archiveVisit)$('duration').value=0;
   $('archivePanel').hidden=false;$('results').hidden=false;$('archiveInfo').textContent='正在確認私人資料庫登入狀態…';
   (async()=>{
     try{
