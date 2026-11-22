@@ -161,11 +161,11 @@ $('videoDemoButton').addEventListener('click',async()=>{
   if(busy)return;
   try{
     setBusy(true);status('正在從 BabyPose 公開專案載入示範短片…');
-    const response=await fetch('https://raw.githubusercontent.com/meyurtsever/BabyPose/main/demo/baby_stretching.mp4');
+    const response=await fetch('https://raw.githubusercontent.com/meyurtsever/BabyPose/main/data/kicking_legs/kicking_legs_14.mp4');
     if(!response.ok)throw Error(`公開短片下載失敗（${response.status}），請改用本機影片。`);
     const blob=await response.blob();setBusy(false);
-    $('duration').value=15;
-    await loadVideo(new File([blob],'babypose_stretching_15s.mp4',{type:'video/mp4'}),10);
+    $('duration').value=0;
+    await loadVideo(new File([blob],'babypose_fullbody_11s.mp4',{type:'video/mp4'}),10);
   }catch(error){setBusy(false);status(error.message,'error');}
 });
 for(const event of ['dragover','dragleave','drop'])$('dropZone').addEventListener(event,e=>{

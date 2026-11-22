@@ -1,6 +1,6 @@
 {
   "name": "infant-motion-lab",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Browser-based RTMPose infant pose and movement research tool",
   "type": "module",

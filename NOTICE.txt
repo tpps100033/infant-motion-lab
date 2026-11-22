@@ -28,8 +28,8 @@ The built-in demo consists entirely of generated joint coordinates.
 No patient photographs, source videos, or clinical records are included.
 
 Optional public infant video example (downloaded separately at user request):
-BabyPose by meyurtsever, demo/baby_stretching.mp4 (15 seconds).
-https://github.com/meyurtsever/BabyPose/tree/main/demo
-https://raw.githubusercontent.com/meyurtsever/BabyPose/main/demo/baby_stretching.mp4
+BabyPose by meyurtsever, data/kicking_legs/kicking_legs_14.mp4 (approximately 11.26 seconds).
+https://github.com/meyurtsever/BabyPose/tree/main/data/kicking_legs
+https://raw.githubusercontent.com/meyurtsever/BabyPose/main/data/kicking_legs/kicking_legs_14.mp4
 This video is not bundled in this repository or covered by this project's MIT
 license. Consult the original project's terms before reusing source material.
