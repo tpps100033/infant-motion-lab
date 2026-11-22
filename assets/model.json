@@ -1,0 +1,36 @@
+{
+  "name": "rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504",
+  "input": [
+    1,
+    3,
+    256,
+    192
+  ],
+  "joint_count": 17,
+  "bytes": 54330655,
+  "sha256": "5c0a4bf67953e6d2ac43ce15e77dc9d5d354ae18430a47d2c5963a7bc5683e3c",
+  "parts": [
+    {
+      "file": "rtmpose-m.part00",
+      "bytes": 16777216,
+      "sha256": "ade2a6899facd032772dcfb2ab4092910a5a93d5680be7d9e6eb83f79f9a4052"
+    },
+    {
+      "file": "rtmpose-m.part01",
+      "bytes": 16777216,
+      "sha256": "17a7079f44c56d07140f79d7581a8fe1ce775dd5dfbbb146704131223ee623d1"
+    },
+    {
+      "file": "rtmpose-m.part02",
+      "bytes": 16777216,
+      "sha256": "b32ad2996f1b9b738a5543b2a94c53303da07a57314261086b0dd525cd5303e8"
+    },
+    {
+      "file": "rtmpose-m.part03",
+      "bytes": 3999007,
+      "sha256": "f15428332f4997d6873afe2cc77a18cc94ea3847ea0ee48a19b59e920d84ab9d"
+    }
+  ],
+  "source": "https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose",
+  "runtime": "onnxruntime-web@1.23.2"
+}

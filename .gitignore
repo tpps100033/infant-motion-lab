@@ -1,0 +1,8 @@
+/assets/*.part*
+/vendor/ort*.mjs
+/vendor/*.wasm
+/public/
+/models/
+/outputs/
+__pycache__/
+*.zip

@@ -1,0 +1,25 @@
+Motion Lab: infant pose and movement research prototype
+
+RTMPose-M model and MMPose:
+https://github.com/open-mmlab/mmpose/tree/main/projects/rtmpose
+Model: rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504
+Source archive:
+https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/onnx_sdk/rtmpose-m_simcc-body7_pt-body7_420e-256x192-e48f03d0_20230504.zip
+Model weights are unchanged and split into static binary parts for delivery.
+See vendor/MMPose-LICENSE.txt for the OpenMMLab Apache 2.0 license.
+
+ONNX Runtime Web 1.23.2:
+https://www.npmjs.com/package/onnxruntime-web/v/1.23.2
+https://onnxruntime.ai/
+Copyright (c) Microsoft Corporation. MIT License.
+Unmodified runtime JavaScript and WebAssembly files are bundled in vendor/.
+See vendor/ONNXRUNTIME-LICENSE.txt.
+
+Preprocessing and measurements:
+Independent JavaScript implementation aligned with the existing Python research
+pipeline and RTMPose SimCC coordinate decoding. BGR preprocessing matches rtmlib
+0.0.15. Floating-point and browser decoding differences are documented in DEPLOY.md.
+rtmlib: https://github.com/Tau-J/rtmlib
+
+The built-in demo consists entirely of generated joint coordinates.
+No patient photographs, source videos, or clinical records are included.
